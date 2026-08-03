@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>আমার হিসাব</title>
+<meta name="theme-color" content="#0F1D19" />
+<meta name="description" content="আয়-ব্যয় ট্র্যাকার - ফাইভার, এডবি স্টক, শাটারস্টক ও অন্যান্য আয়ের হিসাব রাখুন" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0F1D19; --surface:#16281F; --surface2:#1D3327;
+    --gold:#D8B26C; --gold-dim:#8A7548;
+    --income:#5FC49A; --expense:#E38267;
+    --text:#F2EFE4; --muted:#8CA79B; --border:#2A4234;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);font-family:'Hind Siliguri',sans-serif;color:var(--text);}
+  body{display:flex;justify-content:center;min-height:100vh;}
+  #app{width:100%;max-width:460px;min-height:100vh;position:relative;display:flex;flex-direction:column;}
+  .content{flex:1;overflow-y:auto;padding:20px 16px 100px;}
+  .num{font-family:'DM Sans',sans-serif;}
+  h1,h2,h3,p{margin:0;}
+  button{font-family:inherit;cursor:pointer;}
+  input{font-family:inherit;}
+
+  .top-label{color:var(--muted);font-size:13px;margin-bottom:4px;}
+  .passbook{background:linear-gradient(135deg,var(--surface2) 0%, var(--surface) 100%);border:1px solid var(--border);border-radius:16px;padding:18px 16px 18px 0;display:flex;overflow:hidden;}
+  .stub{width:10px;align-self:stretch;background:repeating-linear-gradient(180deg,var(--gold) 0px,var(--gold) 4px,transparent 4px,transparent 10px);opacity:.6;border-radius:0 4px 4px 0;}
+  .passbook-inner{padding-left:14px;}
+  .balance-label{color:var(--gold-dim);font-size:12px;letter-spacing:.5px;}
+  .balance-value{font-size:32px;font-weight:700;margin:4px 0 14px;}
+  .balance-sub{display:flex;gap:20px;}
+  .balance-sub span{display:flex;align-items:center;gap:6px;font-size:13px;}
+
+  .stat-row{display:flex;gap:10px;margin-top:16px;}
+  .stat-card{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;}
+  .stat-label{color:var(--muted);font-size:11px;}
+  .stat-value{font-size:16px;font-weight:700;margin-top:4px;}
+
+  .row-between{display:flex;justify-content:space-between;align-items:center;margin-top:26px;margin-bottom:10px;}
+  .section-title{font-size:15px;font-weight:600;}
+  .link-btn{display:flex;align-items:center;gap:2px;background:none;border:none;color:var(--gold);font-size:12px;padding:0;}
+
+  .txn-list{display:flex;flex-direction:column;gap:8px;}
+  .txn-row{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;}
+  .txn-dot{width:32px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px;}
+  .txn-name{font-size:14px;}
+  .txn-sub{color:var(--muted);font-size:12px;margin-top:2px;}
+  .txn-amt{font-weight:600;font-size:14px;}
+  .icon-btn-sm{background:none;border:none;padding:4px;display:flex;color:var(--muted);}
+
+  .empty{padding:40px 0;text-align:center;color:var(--muted);font-size:13px;}
+  .empty.small{padding:16px 0;}
+
+  .chip{border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:12px;background:transparent;color:var(--muted);}
+  .chip.active{background:var(--gold);border-color:var(--gold);color:var(--bg);}
+  .chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+
+  .fab{position:absolute;right:18px;bottom:82px;width:54px;height:54px;border-radius:27px;background:var(--gold);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(216,178,108,.35);z-index:5;font-size:26px;color:var(--bg);}
+  nav{display:flex;border-top:1px solid var(--border);background:var(--surface);padding:8px 0 14px;}
+  .nav-btn{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;padding:4px 0;color:var(--muted);gap:2px;font-size:11px;}
+  .nav-btn.active{color:var(--gold);}
+  .nav-icon{font-size:19px;}
+
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20;}
+  .sheet{width:100%;max-width:460px;background:var(--bg);border-radius:20px 20px 0 0;padding:20px 18px 26px;border:1px solid var(--border);border-bottom:none;max-height:88vh;overflow-y:auto;}
+  .sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+  .sheet-title{font-size:17px;font-weight:700;}
+  .type-toggle-wrap{display:flex;background:var(--surface);border-radius:10px;padding:4px;margin-bottom:18px;}
+  .type-toggle{flex:1;border:none;border-radius:8px;padding:9px 0;font-size:13px;font-weight:600;background:transparent;color:var(--muted);}
+  .type-toggle.active-income{background:var(--income);color:#0F1D19;}
+  .type-toggle.active-expense{background:var(--expense);color:#0F1D19;}
+  label.field-label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px;}
+  .field-input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 12px;color:var(--text);font-size:14px;margin-bottom:14px;outline:none;}
+  .field-input:focus{border-color:var(--gold);}
+  .save-btn{width:100%;background:var(--gold);border:none;border-radius:12px;padding:13px 0;color:var(--bg);font-size:14px;font-weight:700;margin-top:4px;}
+
+  .toast{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 16px;border-radius:20px;font-size:12px;z-index:30;opacity:0;transition:opacity .25s;pointer-events:none;}
+  .toast.show{opacity:1;}
+
+  .settings-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;}
+  .settings-row{display:flex;justify-content:space-between;align-items:center;}
+  .settings-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 14px;font-size:13px;}
+  .chart-wrap{height:160px;margin-bottom:24px;}
+  .breakdown{display:flex;gap:14px;align-items:center;margin-bottom:8px;}
+  .breakdown canvas{width:92px !important;height:92px !important;flex-shrink:0;}
+  .breakdown-list{flex:1;display:flex;flex-direction:column;gap:6px;}
+  .breakdown-item{display:flex;justify-content:space-between;align-items:center;}
+  .breakdown-item .l{display:flex;align-items:center;gap:6px;font-size:12px;}
+  .dot{width:8px;height:8px;border-radius:4px;flex-shrink:0;}
+  .breakdown-item .pct{color:var(--muted);font-size:11px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="content" id="content"></div>
+  <button class="fab" id="fabBtn" aria-label="যোগ করুন">+</button>
+  <nav id="navbar"></nav>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ---------- data + storage ---------- */
+const STORAGE_KEY = 'hisheb_txns_v1';
+const CATS_INCOME_KEY = 'hisheb_cats_income_v1';
+const CATS_EXPENSE_KEY = 'hisheb_cats_expense_v1';
+const DEFAULT_INCOME_SOURCES = [
+  {key:'salary', label:'বেতন'}, {key:'fiverr', label:'ফাইভার'},
+  {key:'adobe', label:'এডবি স্টক'}, {key:'shutter', label:'শাটারস্টক'},
+  {key:'freepik', label:'ফ্রিপিক'}, {key:'other', label:'অন্যান্য'},
+];
+const DEFAULT_EXPENSE_CATS = [
+  {key:'food', label:'খাবার'}, {key:'rent', label:'বাসা ভাড়া'},
+  {key:'bill', label:'বিল'}, {key:'transport', label:'যাতায়াত'},
+  {key:'shopping', label:'কেনাকাটা'}, {key:'medical', label:'চিকিৎসা'},
+  {key:'other', label:'অন্যান্য'},
+];
+function loadCats(kind){
+  const storageKey = kind==='income' ? CATS_INCOME_KEY : CATS_EXPENSE_KEY;
+  try{
+    const raw = localStorage.getItem(storageKey);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return kind==='income' ? [...DEFAULT_INCOME_SOURCES] : [...DEFAULT_EXPENSE_CATS];
+}
+function saveCats(kind, list){
+  const storageKey = kind==='income' ? CATS_INCOME_KEY : CATS_EXPENSE_KEY;
+  try{ localStorage.setItem(storageKey, JSON.stringify(list)); }
+  catch(e){ showToast('সংরক্ষণে সমস্যা হয়েছে'); }
+}
+const monthsBn = ["জানু","ফেব্রু","মার্চ","এপ্রিল","মে","জুন","জুলাই","আগস্ট","সেপ্ট","অক্টো","নভে","ডিসে"];
+const PIE_COLORS = ["#D8B26C","#5FC49A","#E38267","#6FA8DC","#B18CD9","#E3B267","#7FBF9B"];
+
+function toBnDigits(s){ const bn=["০","১","২","৩","৪","৫","৬","৭","৮","৯"]; return String(s).replace(/[0-9]/g, d=>bn[d]); }
+function fmtTaka(n){ const r=Math.round(n); const s=Math.abs(r).toLocaleString('en-IN'); return (r<0?'-৳':'৳')+toBnDigits(s); }
+function fmtDateBn(dateStr){ const d=new Date(dateStr); return `${toBnDigits(d.getDate())} ${monthsBn[d.getMonth()]}`; }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+function loadTxns(){
+  try{ const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(e){ return []; }
+}
+function saveTxns(txns){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(txns)); }
+  catch(e){ showToast('সংরক্ষণে সমস্যা হয়েছে'); }
+}
+
+let state = {
+  tab: 'home',
+  txns: loadTxns(),
+  addType: 'income',
+  incomeCats: loadCats('income'),
+  expenseCats: loadCats('expense'),
+};
+
+/* ---------- toast ---------- */
+let toastTimer;
+function showToast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 1800);
+}
+
+/* ---------- derived data ---------- */
+function computeTotals(txns){
+  const income = txns.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expense = txns.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const now = new Date();
+  const thisMonth = txns.filter(t=>{ const d=new Date(t.date); return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear(); });
+  const monthIncome = thisMonth.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const monthExpense = thisMonth.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  return { income, expense, balance: income-expense, monthIncome, monthExpense };
+}
+function breakdownBy(txns, type, catList){
+  const map = {}; const labels = {};
+  txns.filter(t=>t.type===type).forEach(t=>{
+    map[t.category]=(map[t.category]||0)+t.amount;
+    labels[t.category] = t.categoryLabel || labels[t.category];
+  });
+  return Object.entries(map).map(([key,value])=>{
+    const c = catList.find(c=>c.key===key);
+    return { name: c ? c.label : (labels[key] || key), value };
+  }).sort((a,b)=>b.value-a.value);
+}
+function monthlyTrend(txns){
+  const map = {};
+  txns.forEach(t=>{
+    const d = new Date(t.date);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    if(!map[key]) map[key] = {label: monthsBn[d.getMonth()], income:0, expense:0, sortKey: d.getFullYear()*12+d.getMonth()};
+    if(t.type==='income') map[key].income += t.amount; else map[key].expense += t.amount;
+  });
+  return Object.values(map).sort((a,b)=>a.sortKey-b.sortKey).slice(-6);
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  renderNav();
+  const c = document.getElementById('content');
+  if(state.tab==='home') c.innerHTML = renderHome();
+  else if(state.tab==='history') c.innerHTML = renderHistory();
+  else if(state.tab==='report') c.innerHTML = renderReport();
+  else if(state.tab==='settings') c.innerHTML = renderSettings();
+  attachTabHandlers();
+  if(state.tab==='report') drawCharts();
+}
+
+function renderNav(){
+  const tabs = [
+    {key:'home', label:'হোম', icon:'⌂'},
+    {key:'history', label:'ইতিহাস', icon:'☰'},
+    {key:'report', label:'রিপোর্ট', icon:'◔'},
+    {key:'settings', label:'সেটিংস', icon:'⚙'},
+  ];
+  document.getElementById('navbar').innerHTML = tabs.map(t=>`
+    <button class="nav-btn ${state.tab===t.key?'active':''}" data-tab="${t.key}">
+      <span class="nav-icon">${t.icon}</span><span>${t.label}</span>
+    </button>`).join('');
+}
+
+function txnRowHtml(t, showDelete){
+  const isIncome = t.type==='income';
+  const catList = isIncome ? state.incomeCats : state.expenseCats;
+  const label = (catList.find(c=>c.key===t.category)||{}).label || t.categoryLabel || t.category;
+  return `
+  <div class="txn-row">
+    <div class="txn-dot" style="background:${isIncome?'rgba(95,196,154,.15)':'rgba(227,130,103,.15)'};color:${isIncome?'var(--income)':'var(--expense)'}">${isIncome?'↑':'↓'}</div>
+    <div style="flex:1;min-width:0;">
+      <p class="txn-name">${label}</p>
+      <p class="txn-sub">${t.note?t.note+' · ':''}${fmtDateBn(t.date)}</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="txn-amt num" style="color:${isIncome?'var(--income)':'var(--expense)'}">${isIncome?'+':'-'}${fmtTaka(t.amount)}</span>
+      ${showDelete?`<button class="icon-btn-sm" data-del="${t.id}" aria-label="মুছুন">🗑</button>`:''}
+    </div>
+  </div>`;
+}
+
+function renderHome(){
+  const totals = computeTotals(state.txns);
+  const recent = state.txns.slice(0,5);
+  return `
+    <p class="top-label">আপনার পাসবই</p>
+    <div class="passbook">
+      <div class="stub"></div>
+      <div class="passbook-inner">
+        <p class="balance-label">মোট জমা</p>
+        <p class="balance-value num">${fmtTaka(totals.balance)}</p>
+        <div class="balance-sub">
+          <span style="color:var(--income)">↑ <span class="num">${fmtTaka(totals.income)}</span></span>
+          <span style="color:var(--expense)">↓ <span class="num">${fmtTaka(totals.expense)}</span></span>
+        </div>
+      </div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card"><p class="stat-label">এই মাসে আয়</p><p class="stat-value num" style="color:var(--income)">${fmtTaka(totals.monthIncome)}</p></div>
+      <div class="stat-card"><p class="stat-label">এই মাসে ব্যয়</p><p class="stat-value num" style="color:var(--expense)">${fmtTaka(totals.monthExpense)}</p></div>
+    </div>
+    <div class="row-between">
+      <p class="section-title">সাম্প্রতিক লেনদেন</p>
+      ${state.txns.length>0?`<button class="link-btn" id="seeAllBtn">সব দেখুন ›</button>`:''}
+    </div>
+    ${recent.length===0 ? `<div class="empty">এখনও কোনো লেনদেন নেই। + বাটনে চাপ দিয়ে শুরু করুন।</div>` :
+      `<div class="txn-list">${recent.map(t=>txnRowHtml(t,false)).join('')}</div>`}
+  `;
+}
+
+function renderHistory(){
+  const filter = state.historyFilter || 'all';
+  const filtered = state.txns.filter(t=> filter==='all' || t.type===filter);
+  const grouped = {};
+  filtered.forEach(t=>{
+    const d = new Date(t.date);
+    const key = `${monthsBn[d.getMonth()]} ${toBnDigits(d.getFullYear())}`;
+    if(!grouped[key]) grouped[key]=[];
+    grouped[key].push(t);
+  });
+  return `
+    <p class="section-title" style="font-size:20px;margin-bottom:16px;">ইতিহাস</p>
+    <div class="chip-row" style="margin-bottom:18px;">
+      <button class="chip ${filter==='all'?'active':''}" data-filter="all">সব</button>
+      <button class="chip ${filter==='income'?'active':''}" data-filter="income">আয়</button>
+      <button class="chip ${filter==='expense'?'active':''}" data-filter="expense">ব্যয়</button>
+    </div>
+    ${filtered.length===0 ? `<div class="empty">কোনো লেনদেন পাওয়া যায়নি।</div>` :
+      Object.entries(grouped).map(([month, items])=>`
+        <div style="margin-bottom:20px;">
+          <p style="color:var(--muted);font-size:12px;margin-bottom:8px;">${month}</p>
+          <div class="txn-list">${items.map(t=>txnRowHtml(t,true)).join('')}</div>
+        </div>`).join('')}
+  `;
+}
+
+function renderReport(){
+  return `
+    <p class="section-title" style="font-size:20px;margin-bottom:18px;">রিপোর্ট</p>
+    <p class="section-title" style="margin-bottom:12px;">মাসিক প্রবণতা</p>
+    <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+    <p class="section-title" style="margin-bottom:12px;">উৎস অনুযায়ী আয়</p>
+    <div id="incomeBreakdown"></div>
+    <p class="section-title" style="margin:24px 0 12px;">খাত অনুযায়ী ব্যয়</p>
+    <div id="expenseBreakdown"></div>
+  `;
+}
+
+function catChipsHtml(kind){
+  const cats = kind==='income' ? state.incomeCats : state.expenseCats;
+  return cats.map(c=>`
+    <span class="chip" style="display:inline-flex;align-items:center;gap:6px;">
+      ${c.label}
+      <button data-delcat="${kind}:${c.key}" style="background:none;border:none;color:var(--expense);padding:0;font-size:13px;line-height:1;">✕</button>
+    </span>`).join('');
+}
+
+function renderSettings(){
+  return `
+    <p class="section-title" style="font-size:20px;margin-bottom:18px;">সেটিংস</p>
+    <div class="settings-card">
+      <p style="font-weight:600;margin-bottom:10px;">আয়ের উৎসগুলো</p>
+      <div class="chip-row" style="margin-bottom:12px;">${catChipsHtml('income')}</div>
+      <div style="display:flex;gap:8px;">
+        <input class="field-input" style="margin-bottom:0;flex:1;" type="text" id="newIncomeCatInput" placeholder="নতুন উৎসের নাম" />
+        <button class="settings-btn" id="addIncomeCatBtn">যোগ</button>
+      </div>
+    </div>
+    <div class="settings-card">
+      <p style="font-weight:600;margin-bottom:10px;">ব্যয়ের খাতগুলো</p>
+      <div class="chip-row" style="margin-bottom:12px;">${catChipsHtml('expense')}</div>
+      <div style="display:flex;gap:8px;">
+        <input class="field-input" style="margin-bottom:0;flex:1;" type="text" id="newExpenseCatInput" placeholder="নতুন খাতের নাম" />
+        <button class="settings-btn" id="addExpenseCatBtn">যোগ</button>
+      </div>
+    </div>
+    <div class="settings-card">
+      <p style="font-weight:600;margin-bottom:6px;">ব্যাকআপ নিন</p>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">একটা ফাইল ডাউনলোড হবে। সেটা আপনার Google Drive-এ সেভ করে রাখুন যাতে অ্যাপ আপডেট বা মোবাইল পাল্টালেও ডাটা ফিরিয়ে আনতে পারেন।</p>
+      <button class="settings-btn" id="exportBtn" style="width:100%;">⬇ ব্যাকআপ ফাইল ডাউনলোড করুন</button>
+    </div>
+    <div class="settings-card">
+      <p style="font-weight:600;margin-bottom:6px;">ব্যাকআপ ফিরিয়ে আনুন</p>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">Google Drive বা ফোন থেকে আগের ব্যাকআপ ফাইল বেছে নিন।</p>
+      <input type="file" id="importFile" accept="application/json" style="display:none;" />
+      <button class="settings-btn" id="importBtn" style="width:100%;">⬆ ব্যাকআপ ফাইল বেছে নিন</button>
+    </div>
+    <div class="settings-card">
+      <p style="font-weight:600;margin-bottom:6px;">সব ডাটা মুছুন</p>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">এই ডিভাইস থেকে সব আয়-ব্যয়ের এন্ট্রি স্থায়ীভাবে মুছে যাবে।</p>
+      <button class="settings-btn" id="clearBtn" style="width:100%;color:var(--expense);">সব মুছে ফেলুন</button>
+    </div>
+    <p style="color:var(--muted);font-size:11px;text-align:center;margin-top:8px;">আমার হিসাব · সংস্করণ ১.০</p>
+  `;
+}
+
+function drawCharts(){
+  const trend = monthlyTrend(state.txns);
+  const ctx = document.getElementById('trendChart');
+  if(ctx && trend.length){
+    new Chart(ctx, {
+      type:'bar',
+      data:{ labels: trend.map(t=>t.label), datasets:[
+        {label:'আয়', data: trend.map(t=>t.income), backgroundColor:'#5FC49A', borderRadius:4},
+        {label:'ব্যয়', data: trend.map(t=>t.expense), backgroundColor:'#E38267', borderRadius:4},
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(c)=>fmtTaka(c.raw)}} },
+        scales:{ x:{ ticks:{color:'#8CA79B', font:{family:"'Hind Siliguri'"}}, grid:{display:false} },
+                 y:{ display:false } } }
+    });
+  } else if(ctx){
+    ctx.parentElement.innerHTML = `<div class="empty small">তথ্য নেই</div>`;
+  }
+
+  drawBreakdown('incomeBreakdown', breakdownBy(state.txns,'income',state.incomeCats));
+  drawBreakdown('expenseBreakdown', breakdownBy(state.txns,'expense',state.expenseCats));
+}
+
+function drawBreakdown(elId, data){
+  const el = document.getElementById(elId);
+  if(!data.length){ el.innerHTML = `<div class="empty small">তথ্য নেই</div>`; return; }
+  const total = data.reduce((s,d)=>s+d.value,0);
+  el.innerHTML = `
+    <div class="breakdown">
+      <canvas id="${elId}-pie"></canvas>
+      <div class="breakdown-list">
+        ${data.slice(0,5).map((d,i)=>`
+          <div class="breakdown-item">
+            <span class="l"><span class="dot" style="background:${PIE_COLORS[i%PIE_COLORS.length]}"></span>${d.name}</span>
+            <span class="pct num">${toBnDigits(Math.round((d.value/total)*100))}%</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  new Chart(document.getElementById(elId+'-pie'), {
+    type:'doughnut',
+    data:{ labels: data.map(d=>d.name), datasets:[{ data: data.map(d=>d.value), backgroundColor: PIE_COLORS, borderWidth:0 }] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'60%',
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(c)=>fmtTaka(c.raw)}} } }
+  });
+}
+
+/* ---------- add sheet ---------- */
+function openAddSheet(){
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.id = 'addOverlay';
+  overlay.innerHTML = `
+    <div class="sheet" id="sheetBody">
+      <div class="sheet-head">
+        <p class="sheet-title">নতুন এন্ট্রি</p>
+        <button class="icon-btn-sm" id="closeSheet" aria-label="বন্ধ করুন" style="font-size:18px;">✕</button>
+      </div>
+      <div class="type-toggle-wrap">
+        <button class="type-toggle" id="typeIncomeBtn">আয়</button>
+        <button class="type-toggle" id="typeExpenseBtn">ব্যয়</button>
+      </div>
+      <label class="field-label">পরিমাণ (৳)</label>
+      <input class="field-input" type="number" inputmode="decimal" id="amountInput" placeholder="০" />
+      <label class="field-label" id="catLabel">উৎস</label>
+      <div class="chip-row" id="catChips" style="margin-bottom:14px;"></div>
+      <label class="field-label">তারিখ</label>
+      <input class="field-input" type="date" id="dateInput" />
+      <label class="field-label">নোট (ঐচ্ছিক)</label>
+      <input class="field-input" type="text" id="noteInput" placeholder="যেমন: জুলাই মাসের বেতন" />
+      <button class="save-btn" id="saveTxnBtn">সংরক্ষণ করুন</button>
+    </div>`;
+  document.getElementById('app').appendChild(overlay);
+
+  document.getElementById('dateInput').value = new Date().toISOString().slice(0,10);
+  let type = 'income';
+  let category = state.incomeCats[0].key;
+
+  function renderChips(){
+    const cats = type==='income' ? state.incomeCats : state.expenseCats;
+    document.getElementById('catLabel').textContent = type==='income' ? 'উৎস' : 'খাত';
+    document.getElementById('catChips').innerHTML = cats.map(c=>
+      `<button class="chip ${category===c.key?'active':''}" data-cat="${c.key}">${c.label}</button>`
+    ).join('') + `<button class="chip" id="addCatInlineBtn">+ নতুন</button>`;
+    document.querySelectorAll('#catChips [data-cat]').forEach(b=>{
+      b.onclick = ()=>{ category = b.dataset.cat; renderChips(); };
+    });
+    document.getElementById('addCatInlineBtn').onclick = ()=>{
+      const label = prompt(type==='income' ? 'নতুন আয়ের উৎসের নাম লিখুন' : 'নতুন ব্যয়ের খাতের নাম লিখুন');
+      if(!label || !label.trim()) return;
+      const newCat = { key: uid(), label: label.trim() };
+      if(type==='income'){ state.incomeCats = [...state.incomeCats, newCat]; saveCats('income', state.incomeCats); }
+      else { state.expenseCats = [...state.expenseCats, newCat]; saveCats('expense', state.expenseCats); }
+      category = newCat.key;
+      renderChips();
+    };
+  }
+  function setType(t){
+    type = t; category = (t==='income'?state.incomeCats:state.expenseCats)[0].key;
+    document.getElementById('typeIncomeBtn').className = 'type-toggle' + (t==='income'?' active-income':'');
+    document.getElementById('typeExpenseBtn').className = 'type-toggle' + (t==='expense'?' active-expense':'');
+    renderChips();
+  }
+  setType('income');
+
+  document.getElementById('typeIncomeBtn').onclick = ()=>setType('income');
+  document.getElementById('typeExpenseBtn').onclick = ()=>setType('expense');
+  document.getElementById('closeSheet').onclick = closeAddSheet;
+  overlay.onclick = (e)=>{ if(e.target===overlay) closeAddSheet(); };
+
+  document.getElementById('saveTxnBtn').onclick = ()=>{
+    const amount = parseFloat(document.getElementById('amountInput').value);
+    if(!amount || amount<=0) return;
+    const date = document.getElementById('dateInput').value || new Date().toISOString().slice(0,10);
+    const note = document.getElementById('noteInput').value.trim();
+    const cats = type==='income' ? state.incomeCats : state.expenseCats;
+    const categoryLabel = (cats.find(c=>c.key===category)||{}).label || category;
+    state.txns = [{ id: uid(), type, amount, category, categoryLabel, date, note }, ...state.txns];
+    saveTxns(state.txns);
+    closeAddSheet();
+    showToast(type==='income' ? 'আয় যোগ হয়েছে' : 'ব্যয় যোগ হয়েছে');
+    render();
+  };
+}
+function closeAddSheet(){
+  const o = document.getElementById('addOverlay');
+  if(o) o.remove();
+}
+
+/* ---------- tab-specific handlers ---------- */
+function attachTabHandlers(){
+  if(state.tab==='home'){
+    const btn = document.getElementById('seeAllBtn');
+    if(btn) btn.onclick = ()=>{ state.tab='history'; render(); };
+  }
+  if(state.tab==='history'){
+    document.querySelectorAll('[data-filter]').forEach(b=>{
+      b.onclick = ()=>{ state.historyFilter = b.dataset.filter; render(); };
+    });
+    document.querySelectorAll('[data-del]').forEach(b=>{
+      b.onclick = ()=>{
+        state.txns = state.txns.filter(t=>t.id!==b.dataset.del);
+        saveTxns(state.txns);
+        render();
+      };
+    });
+  }
+  if(state.tab==='settings'){
+    document.getElementById('addIncomeCatBtn').onclick = ()=>addCategory('income');
+    document.getElementById('addExpenseCatBtn').onclick = ()=>addCategory('expense');
+    document.getElementById('newIncomeCatInput').onkeydown = (e)=>{ if(e.key==='Enter') addCategory('income'); };
+    document.getElementById('newExpenseCatInput').onkeydown = (e)=>{ if(e.key==='Enter') addCategory('expense'); };
+    document.querySelectorAll('[data-delcat]').forEach(b=>{
+      b.onclick = ()=>{
+        const [kind, key] = b.dataset.delcat.split(':');
+        deleteCategory(kind, key);
+      };
+    });
+    document.getElementById('exportBtn').onclick = exportBackup;
+    document.getElementById('importBtn').onclick = ()=>document.getElementById('importFile').click();
+    document.getElementById('importFile').onchange = importBackup;
+    document.getElementById('clearBtn').onclick = ()=>{
+      if(confirm('আপনি কি নিশ্চিত? সব ডাটা স্থায়ীভাবে মুছে যাবে।')){
+        state.txns = [];
+        saveTxns(state.txns);
+        render();
+        showToast('সব ডাটা মুছে ফেলা হয়েছে');
+      }
+    };
+  }
+}
+
+/* ---------- category management ---------- */
+function addCategory(kind){
+  const inputId = kind==='income' ? 'newIncomeCatInput' : 'newExpenseCatInput';
+  const input = document.getElementById(inputId);
+  const label = input.value.trim();
+  if(!label) return;
+  const list = kind==='income' ? state.incomeCats : state.expenseCats;
+  if(list.some(c=>c.label===label)){ showToast('এই নামে আগে থেকেই আছে'); return; }
+  const newCat = { key: uid(), label };
+  if(kind==='income'){ state.incomeCats = [...list, newCat]; saveCats('income', state.incomeCats); }
+  else { state.expenseCats = [...list, newCat]; saveCats('expense', state.expenseCats); }
+  input.value = '';
+  render();
+  showToast('যোগ হয়েছে');
+}
+function deleteCategory(kind, key){
+  const used = state.txns.some(t=> t.type===kind && t.category===key);
+  if(used){
+    showToast('এই খাতে এন্ট্রি আছে, তাই মুছা যাবে না');
+    return;
+  }
+  if(kind==='income'){
+    if(state.incomeCats.length<=1){ showToast('অন্তত একটা উৎস থাকতে হবে'); return; }
+    state.incomeCats = state.incomeCats.filter(c=>c.key!==key);
+    saveCats('income', state.incomeCats);
+  } else {
+    if(state.expenseCats.length<=1){ showToast('অন্তত একটা খাত থাকতে হবে'); return; }
+    state.expenseCats = state.expenseCats.filter(c=>c.key!==key);
+    saveCats('expense', state.expenseCats);
+  }
+  render();
+  showToast('মুছে ফেলা হয়েছে');
+}
+
+/* ---------- backup export / import ---------- */
+function exportBackup(){
+  const payload = { app:'আমার হিসাব', version:1, exportedAt: new Date().toISOString(), txns: state.txns, incomeCats: state.incomeCats, expenseCats: state.expenseCats };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `amar-hisheb-backup-${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('ব্যাকআপ ফাইল ডাউনলোড হয়েছে');
+}
+function importBackup(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      const incoming = Array.isArray(data.txns) ? data.txns : (Array.isArray(data) ? data : null);
+      if(!incoming) throw new Error('invalid');
+      const merge = confirm('বর্তমান ডাটার সাথে যোগ করতে চান? (Cancel করলে পুরনো ডাটা মুছে গিয়ে এই ব্যাকআপ দিয়ে প্রতিস্থাপিত হবে)');
+      if(merge){
+        const existingIds = new Set(state.txns.map(t=>t.id));
+        const newOnes = incoming.filter(t=>!existingIds.has(t.id));
+        state.txns = [...newOnes, ...state.txns];
+      } else {
+        state.txns = incoming;
+      }
+      saveTxns(state.txns);
+      if(Array.isArray(data.incomeCats) && data.incomeCats.length){
+        state.incomeCats = data.incomeCats; saveCats('income', state.incomeCats);
+      }
+      if(Array.isArray(data.expenseCats) && data.expenseCats.length){
+        state.expenseCats = data.expenseCats; saveCats('expense', state.expenseCats);
+      }
+      render();
+      showToast('ব্যাকআপ ফিরিয়ে আনা হয়েছে');
+    }catch(err){
+      showToast('ফাইলটি সঠিক নয়');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/* ---------- nav wiring ---------- */
+document.getElementById('fabBtn').onclick = openAddSheet;
+document.addEventListener('click', (e)=>{
+  const navBtn = e.target.closest('.nav-btn');
+  if(navBtn){ state.tab = navBtn.dataset.tab; render(); }
+});
+
+render();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
