@@ -64,9 +64,9 @@
 
   .fab{position:absolute;right:18px;bottom:82px;width:54px;height:54px;border-radius:27px;background:var(--gold);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(216,178,108,.35);z-index:5;font-size:26px;color:var(--bg);}
   nav{display:flex;border-top:1px solid var(--border);background:var(--surface);padding:8px 0 14px;}
-  .nav-btn{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;padding:4px 0;color:var(--muted);gap:2px;font-size:11px;}
+  .nav-btn{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;padding:4px 0;color:var(--muted);gap:2px;font-size:9.5px;white-space:nowrap;}
   .nav-btn.active{color:var(--gold);}
-  .nav-icon{font-size:19px;}
+  .nav-icon{font-size:17px;}
 
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20;}
   .sheet{width:100%;max-width:460px;background:var(--bg);border-radius:20px 20px 0 0;padding:20px 18px 26px;border:1px solid var(--border);border-bottom:none;max-height:88vh;overflow-y:auto;}
@@ -76,6 +76,7 @@
   .type-toggle{flex:1;border:none;border-radius:8px;padding:9px 0;font-size:13px;font-weight:600;background:transparent;color:var(--muted);}
   .type-toggle.active-income{background:var(--income);color:#0F1D19;}
   .type-toggle.active-expense{background:var(--expense);color:#0F1D19;}
+  .type-toggle.active-neutral{background:var(--gold);color:var(--bg);}
   label.field-label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px;}
   .field-input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 12px;color:var(--text);font-size:14px;margin-bottom:14px;outline:none;}
   .field-input:focus{border-color:var(--gold);}
@@ -157,6 +158,9 @@ let state = {
   addType: 'income',
   incomeCats: loadCats('income'),
   expenseCats: loadCats('expense'),
+  statementMode: 'month',
+  statementDate: new Date().toISOString().slice(0,10),
+  statementMonth: new Date().toISOString().slice(0,7),
 };
 
 /* ---------- toast ---------- */
@@ -207,16 +211,19 @@ function render(){
   const c = document.getElementById('content');
   if(state.tab==='home') c.innerHTML = renderHome();
   else if(state.tab==='history') c.innerHTML = renderHistory();
+  else if(state.tab==='statement') c.innerHTML = renderStatement();
   else if(state.tab==='report') c.innerHTML = renderReport();
   else if(state.tab==='settings') c.innerHTML = renderSettings();
   attachTabHandlers();
   if(state.tab==='report') drawCharts();
+  if(state.tab==='statement') drawStatementChart();
 }
 
 function renderNav(){
   const tabs = [
     {key:'home', label:'হোম', icon:'⌂'},
     {key:'history', label:'ইতিহাস', icon:'☰'},
+    {key:'statement', label:'খতিয়ান', icon:'▤'},
     {key:'report', label:'রিপোর্ট', icon:'◔'},
     {key:'settings', label:'সেটিংস', icon:'⚙'},
   ];
@@ -310,6 +317,104 @@ function renderReport(){
     <div id="expenseBreakdown"></div>
   `;
 }
+
+/* ---------- statement (period-wise income/expense by category) ---------- */
+function getStatementTxns(){
+  if(state.statementMode==='day'){
+    return state.txns.filter(t=> t.date === state.statementDate);
+  } else {
+    const month = state.statementMonth; // 'YYYY-MM'
+    return state.txns.filter(t=> t.date && t.date.slice(0,7) === month);
+  }
+}
+function shiftStatementPeriod(dir){
+  if(state.statementMode==='day'){
+    const d = new Date(state.statementDate);
+    d.setDate(d.getDate()+dir);
+    state.statementDate = d.toISOString().slice(0,10);
+  } else {
+    const [y,m] = state.statementMonth.split('-').map(Number);
+    const d = new Date(y, m-1+dir, 1);
+    state.statementMonth = d.toISOString().slice(0,7);
+  }
+}
+function periodLabel(){
+  if(state.statementMode==='day') return fmtDateBn(state.statementDate) + ' ' + toBnDigits(new Date(state.statementDate).getFullYear());
+  const [y,m] = state.statementMonth.split('-').map(Number);
+  return monthsBn[m-1] + ' ' + toBnDigits(y);
+}
+function statementTableHtml(kind, txns, cats){
+  const list = txns.filter(t=>t.type===kind);
+  if(!list.length) return `<div class="empty small">কোনো এন্ট্রি নেই</div>`;
+  const map = {}; const labels = {};
+  list.forEach(t=>{ map[t.category]=(map[t.category]||0)+t.amount; labels[t.category]=t.categoryLabel; });
+  const total = Object.values(map).reduce((s,v)=>s+v,0);
+  const rows = Object.entries(map).map(([key,value])=>{
+    const c = cats.find(c=>c.key===key);
+    const label = c ? c.label : (labels[key]||key);
+    const pct = total ? Math.round((value/total)*100) : 0;
+    return {label, value, pct};
+  }).sort((a,b)=>b.value-a.value);
+  return `
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${rows.map(r=>`
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+            <span>${r.label}</span>
+            <span class="num" style="color:${kind==='income'?'var(--income)':'var(--expense)'}">${fmtTaka(r.value)} <span style="color:var(--muted);">(${toBnDigits(r.pct)}%)</span></span>
+          </div>
+          <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${r.pct}%;background:${kind==='income'?'var(--income)':'var(--expense)'};"></div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+function renderStatement(){
+  const txns = getStatementTxns();
+  const income = txns.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expense = txns.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  return `
+    <p class="section-title" style="font-size:20px;margin-bottom:18px;">খতিয়ান</p>
+
+    <div class="type-toggle-wrap" style="margin-bottom:14px;">
+      <button class="type-toggle ${state.statementMode==='day'?'active-neutral':''}" id="stmtModeDay">দৈনিক</button>
+      <button class="type-toggle ${state.statementMode==='month'?'active-neutral':''}" id="stmtModeMonth">মাসিক</button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
+      <button class="settings-btn" id="stmtPrev" style="padding:9px 12px;">‹</button>
+      ${state.statementMode==='day'
+        ? `<input class="field-input" style="margin-bottom:0;flex:1;" type="date" id="stmtDateInput" value="${state.statementDate}" />`
+        : `<input class="field-input" style="margin-bottom:0;flex:1;" type="month" id="stmtMonthInput" value="${state.statementMonth}" />`}
+      <button class="settings-btn" id="stmtNext" style="padding:9px 12px;">›</button>
+    </div>
+
+    <div class="passbook" style="padding:16px;">
+      <div class="passbook-inner" style="padding-left:0;width:100%;">
+        <p class="balance-label">${periodLabel()} — নীট</p>
+        <p class="balance-value num" style="font-size:26px;">${fmtTaka(income-expense)}</p>
+        <div class="balance-sub">
+          <span style="color:var(--income)">↑ <span class="num">${fmtTaka(income)}</span></span>
+          <span style="color:var(--expense)">↓ <span class="num">${fmtTaka(expense)}</span></span>
+        </div>
+      </div>
+    </div>
+
+    <p class="section-title" style="margin:22px 0 12px;">আয় — উৎস অনুযায়ী</p>
+    ${statementTableHtml('income', txns, state.incomeCats)}
+
+    <p class="section-title" style="margin:22px 0 12px;">ব্যয় — খাত অনুযায়ী</p>
+    ${statementTableHtml('expense', txns, state.expenseCats)}
+
+    <div class="row-between">
+      <p class="section-title">এই সময়ের লেনদেন</p>
+    </div>
+    ${txns.length===0 ? `<div class="empty small">এই সময়ে কোনো লেনদেন নেই</div>` :
+      `<div class="txn-list">${[...txns].sort((a,b)=> a.date<b.date?1:-1).map(t=>txnRowHtml(t,false)).join('')}</div>`}
+  `;
+}
+function drawStatementChart(){ /* reserved for future chart additions */ }
+
 
 function catChipsHtml(kind){
   const cats = kind==='income' ? state.incomeCats : state.expenseCats;
@@ -504,6 +609,16 @@ function attachTabHandlers(){
         render();
       };
     });
+  }
+  if(state.tab==='statement'){
+    document.getElementById('stmtModeDay').onclick = ()=>{ state.statementMode='day'; render(); };
+    document.getElementById('stmtModeMonth').onclick = ()=>{ state.statementMode='month'; render(); };
+    document.getElementById('stmtPrev').onclick = ()=>{ shiftStatementPeriod(-1); render(); };
+    document.getElementById('stmtNext').onclick = ()=>{ shiftStatementPeriod(1); render(); };
+    const dateInput = document.getElementById('stmtDateInput');
+    if(dateInput) dateInput.onchange = ()=>{ state.statementDate = dateInput.value; render(); };
+    const monthInput = document.getElementById('stmtMonthInput');
+    if(monthInput) monthInput.onchange = ()=>{ state.statementMonth = monthInput.value; render(); };
   }
   if(state.tab==='settings'){
     document.getElementById('addIncomeCatBtn').onclick = ()=>addCategory('income');
