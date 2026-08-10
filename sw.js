@@ -1,4 +1,4 @@
-const CACHE_NAME = 'amar-hisheb-v3';
+const CACHE_NAME = 'amar-hisheb-v4';
 const ASSETS = [
   './manifest.json',
   './icons/icon-192.png',

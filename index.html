@@ -11,7 +11,6 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   :root{
     --bg:#F3F5F8; --surface:#FFFFFF; --surface2:#EBEFF5;
@@ -89,14 +88,8 @@
   .settings-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(22,40,64,.04);}
   .settings-row{display:flex;justify-content:space-between;align-items:center;}
   .settings-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 14px;font-size:13px;}
-  .chart-wrap{height:160px;margin-bottom:24px;}
-  .breakdown{display:flex;gap:14px;align-items:center;margin-bottom:8px;}
-  .breakdown canvas{width:92px !important;height:92px !important;flex-shrink:0;}
-  .breakdown-list{flex:1;display:flex;flex-direction:column;gap:6px;}
-  .breakdown-item{display:flex;justify-content:space-between;align-items:center;}
-  .breakdown-item .l{display:flex;align-items:center;gap:6px;font-size:12px;}
-  .dot{width:8px;height:8px;border-radius:4px;flex-shrink:0;}
-  .breakdown-item .pct{color:var(--muted);font-size:11px;}
+  .cat-drill-row{border-radius:8px;padding:2px;margin:-2px;transition:background .15s;}
+  .cat-drill-row:active{background:var(--surface2);}
 </style>
 </head>
 <body>
@@ -137,7 +130,6 @@ function saveCats(kind, list){
   catch(e){ showToast('সংরক্ষণে সমস্যা হয়েছে'); }
 }
 const monthsBn = ["জানু","ফেব্রু","মার্চ","এপ্রিল","মে","জুন","জুলাই","আগস্ট","সেপ্ট","অক্টো","নভে","ডিসে"];
-const PIE_COLORS = ["#2F6FED","#0FA25D","#E24C51","#F2A93B","#8B5CF6","#14B8C4","#F4788A"];
 
 function toBnDigits(s){ const bn=["০","১","২","৩","৪","৫","৬","৭","৮","৯"]; return String(s).replace(/[0-9]/g, d=>bn[d]); }
 function fmtTaka(n){ const r=Math.round(n); const s=Math.abs(r).toLocaleString('en-IN'); return (r<0?'-৳':'৳')+toBnDigits(s); }
@@ -162,6 +154,8 @@ let state = {
   statementMode: 'month',
   statementDate: new Date().toISOString().slice(0,10),
   statementMonth: new Date().toISOString().slice(0,7),
+  statementRangeFrom: new Date().toISOString().slice(0,8) + '01',
+  statementRangeTo: new Date().toISOString().slice(0,10),
 };
 
 /* ---------- toast ---------- */
@@ -184,27 +178,6 @@ function computeTotals(txns){
   const monthExpense = thisMonth.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
   return { income, expense, balance: income-expense, monthIncome, monthExpense };
 }
-function breakdownBy(txns, type, catList){
-  const map = {}; const labels = {};
-  txns.filter(t=>t.type===type).forEach(t=>{
-    map[t.category]=(map[t.category]||0)+t.amount;
-    labels[t.category] = t.categoryLabel || labels[t.category];
-  });
-  return Object.entries(map).map(([key,value])=>{
-    const c = catList.find(c=>c.key===key);
-    return { name: c ? c.label : (labels[key] || key), value };
-  }).sort((a,b)=>b.value-a.value);
-}
-function monthlyTrend(txns){
-  const map = {};
-  txns.forEach(t=>{
-    const d = new Date(t.date);
-    const key = `${d.getFullYear()}-${d.getMonth()}`;
-    if(!map[key]) map[key] = {label: monthsBn[d.getMonth()], income:0, expense:0, sortKey: d.getFullYear()*12+d.getMonth()};
-    if(t.type==='income') map[key].income += t.amount; else map[key].expense += t.amount;
-  });
-  return Object.values(map).sort((a,b)=>a.sortKey-b.sortKey).slice(-6);
-}
 
 /* ---------- rendering ---------- */
 function render(){
@@ -212,20 +185,16 @@ function render(){
   const c = document.getElementById('content');
   if(state.tab==='home') c.innerHTML = renderHome();
   else if(state.tab==='history') c.innerHTML = renderHistory();
-  else if(state.tab==='statement') c.innerHTML = renderStatement();
   else if(state.tab==='report') c.innerHTML = renderReport();
   else if(state.tab==='settings') c.innerHTML = renderSettings();
   attachTabHandlers();
-  if(state.tab==='report') drawCharts();
-  if(state.tab==='statement') drawStatementChart();
 }
 
 function renderNav(){
   const tabs = [
     {key:'home', label:'হোম', icon:'⌂'},
     {key:'history', label:'ইতিহাস', icon:'☰'},
-    {key:'statement', label:'খতিয়ান', icon:'▤'},
-    {key:'report', label:'রিপোর্ট', icon:'◔'},
+    {key:'report', label:'রিপোর্ট', icon:'▤'},
     {key:'settings', label:'সেটিংস', icon:'⚙'},
   ];
   document.getElementById('navbar').innerHTML = tabs.map(t=>`
@@ -307,25 +276,17 @@ function renderHistory(){
   `;
 }
 
-function renderReport(){
-  return `
-    <p class="section-title" style="font-size:20px;margin-bottom:18px;">রিপোর্ট</p>
-    <p class="section-title" style="margin-bottom:12px;">মাসিক প্রবণতা</p>
-    <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
-    <p class="section-title" style="margin-bottom:12px;">উৎস অনুযায়ী আয়</p>
-    <div id="incomeBreakdown"></div>
-    <p class="section-title" style="margin:24px 0 12px;">খাত অনুযায়ী ব্যয়</p>
-    <div id="expenseBreakdown"></div>
-  `;
-}
-
-/* ---------- statement (period-wise income/expense by category) ---------- */
+/* ---------- report (period-wise statement with category drill-down) ---------- */
 function getStatementTxns(){
   if(state.statementMode==='day'){
     return state.txns.filter(t=> t.date === state.statementDate);
-  } else {
+  } else if(state.statementMode==='month'){
     const month = state.statementMonth; // 'YYYY-MM'
     return state.txns.filter(t=> t.date && t.date.slice(0,7) === month);
+  } else {
+    const from = state.statementRangeFrom <= state.statementRangeTo ? state.statementRangeFrom : state.statementRangeTo;
+    const to = state.statementRangeFrom <= state.statementRangeTo ? state.statementRangeTo : state.statementRangeFrom;
+    return state.txns.filter(t=> t.date >= from && t.date <= to);
   }
 }
 function shiftStatementPeriod(dir){
@@ -333,62 +294,108 @@ function shiftStatementPeriod(dir){
     const d = new Date(state.statementDate);
     d.setDate(d.getDate()+dir);
     state.statementDate = d.toISOString().slice(0,10);
-  } else {
+  } else if(state.statementMode==='month'){
     const [y,m] = state.statementMonth.split('-').map(Number);
     const d = new Date(y, m-1+dir, 1);
     state.statementMonth = d.toISOString().slice(0,7);
   }
 }
-function periodLabel(){
-  if(state.statementMode==='day') return fmtDateBn(state.statementDate) + ' ' + toBnDigits(new Date(state.statementDate).getFullYear());
-  const [y,m] = state.statementMonth.split('-').map(Number);
-  return monthsBn[m-1] + ' ' + toBnDigits(y);
+function fmtDateFull(dateStr){
+  const d = new Date(dateStr);
+  return `${toBnDigits(d.getDate())} ${monthsBn[d.getMonth()]} ${toBnDigits(d.getFullYear())}`;
 }
-function statementTableHtml(kind, txns, cats){
+function periodLabel(){
+  if(state.statementMode==='day') return fmtDateFull(state.statementDate);
+  if(state.statementMode==='month'){
+    const [y,m] = state.statementMonth.split('-').map(Number);
+    return monthsBn[m-1] + ' ' + toBnDigits(y);
+  }
+  return fmtDateFull(state.statementRangeFrom) + ' — ' + fmtDateFull(state.statementRangeTo);
+}
+function categoryBreakdownRows(kind, txns, cats){
   const list = txns.filter(t=>t.type===kind);
-  if(!list.length) return `<div class="empty small">কোনো এন্ট্রি নেই</div>`;
-  const map = {}; const labels = {};
-  list.forEach(t=>{ map[t.category]=(map[t.category]||0)+t.amount; labels[t.category]=t.categoryLabel; });
+  const map = {}; const labels = {}; const counts = {};
+  list.forEach(t=>{
+    map[t.category]=(map[t.category]||0)+t.amount;
+    labels[t.category]=t.categoryLabel;
+    counts[t.category]=(counts[t.category]||0)+1;
+  });
   const total = Object.values(map).reduce((s,v)=>s+v,0);
-  const rows = Object.entries(map).map(([key,value])=>{
-    const c = cats.find(c=>c.key===key);
-    const label = c ? c.label : (labels[key]||key);
-    const pct = total ? Math.round((value/total)*100) : 0;
-    return {label, value, pct};
-  }).sort((a,b)=>b.value-a.value);
+  return {
+    total,
+    rows: Object.entries(map).map(([key,value])=>{
+      const c = cats.find(c=>c.key===key);
+      const label = c ? c.label : (labels[key]||key);
+      const pct = total ? Math.round((value/total)*100) : 0;
+      return {key, label, value, pct, count: counts[key]};
+    }).sort((a,b)=>b.value-a.value)
+  };
+}
+function reportSectionHtml(kind, txns, cats){
+  const { total, rows } = categoryBreakdownRows(kind, txns, cats);
+  const isIncome = kind==='income';
+  const heading = isIncome ? 'আয়ের উৎস' : 'ব্যয়ের খাত';
   return `
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      ${rows.map(r=>`
-        <div>
-          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
-            <span>${r.label}</span>
-            <span class="num" style="color:${kind==='income'?'var(--income)':'var(--expense)'}">${fmtTaka(r.value)} <span style="color:var(--muted);">(${toBnDigits(r.pct)}%)</span></span>
-          </div>
-          <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;">
-            <div style="height:100%;width:${r.pct}%;background:${kind==='income'?'var(--income)':'var(--expense)'};"></div>
-          </div>
-        </div>`).join('')}
+    <div class="settings-card" style="padding:16px;">
+      <div class="row-between" style="margin-top:0;margin-bottom:2px;">
+        <p class="section-title">${heading}</p>
+        <span class="num" style="font-weight:700;font-size:14px;color:${isIncome?'var(--income)':'var(--expense)'};">${fmtTaka(total)}</span>
+      </div>
+      ${rows.length===0 ? `<div class="empty small">কোনো এন্ট্রি নেই</div>` : `
+        <p style="color:var(--muted);font-size:11px;margin-bottom:12px;">একটা খাতে চাপ দিলে সেই খাতের সব এন্ট্রি দেখা যাবে</p>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          ${rows.map(r=>`
+            <button class="cat-drill-row" data-drill="${kind}:${r.key}" style="text-align:left;background:none;border:none;padding:0;width:100%;">
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:5px;">
+                <span style="display:flex;align-items:center;gap:6px;color:var(--text);">${r.label}<span style="color:var(--muted);font-size:11px;">(${toBnDigits(r.count)}টি)</span></span>
+                <span style="display:flex;align-items:center;gap:4px;">
+                  <span class="num" style="color:${isIncome?'var(--income)':'var(--expense)'};font-weight:600;">${fmtTaka(r.value)}</span>
+                  <span style="color:var(--muted);font-size:11px;">(${toBnDigits(r.pct)}%)</span>
+                  <span style="color:var(--muted);font-size:14px;">›</span>
+                </span>
+              </div>
+              <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;">
+                <div style="height:100%;width:${r.pct}%;background:${isIncome?'var(--income)':'var(--expense)'};"></div>
+              </div>
+            </button>`).join('')}
+        </div>`}
     </div>`;
 }
-function renderStatement(){
+function renderReport(){
   const txns = getStatementTxns();
   const income = txns.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
   const expense = txns.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const mode = state.statementMode;
   return `
-    <p class="section-title" style="font-size:20px;margin-bottom:18px;">খতিয়ান</p>
+    <p class="section-title" style="font-size:20px;margin-bottom:18px;">রিপোর্ট</p>
 
     <div class="type-toggle-wrap" style="margin-bottom:14px;">
-      <button class="type-toggle ${state.statementMode==='day'?'active-neutral':''}" id="stmtModeDay">দৈনিক</button>
-      <button class="type-toggle ${state.statementMode==='month'?'active-neutral':''}" id="stmtModeMonth">মাসিক</button>
+      <button class="type-toggle ${mode==='day'?'active-neutral':''}" id="stmtModeDay">দৈনিক</button>
+      <button class="type-toggle ${mode==='month'?'active-neutral':''}" id="stmtModeMonth">মাসিক</button>
+      <button class="type-toggle ${mode==='range'?'active-neutral':''}" id="stmtModeRange">কাস্টম</button>
     </div>
 
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
-      <button class="settings-btn" id="stmtPrev" style="padding:9px 12px;">‹</button>
-      ${state.statementMode==='day'
-        ? `<input class="field-input" style="margin-bottom:0;flex:1;" type="date" id="stmtDateInput" value="${state.statementDate}" />`
-        : `<input class="field-input" style="margin-bottom:0;flex:1;" type="month" id="stmtMonthInput" value="${state.statementMonth}" />`}
-      <button class="settings-btn" id="stmtNext" style="padding:9px 12px;">›</button>
-    </div>
+    ${mode==='range' ? `
+      <div style="display:flex;gap:8px;margin-bottom:6px;">
+        <div style="flex:1;">
+          <label class="field-label">থেকে</label>
+          <input class="field-input" style="margin-bottom:0;" type="date" id="stmtFromInput" value="${state.statementRangeFrom}" />
+        </div>
+        <div style="flex:1;">
+          <label class="field-label">পর্যন্ত</label>
+          <input class="field-input" style="margin-bottom:0;" type="date" id="stmtToInput" value="${state.statementRangeTo}" />
+        </div>
+      </div>
+      <div style="height:18px;"></div>
+    ` : `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
+        <button class="settings-btn" id="stmtPrev" style="padding:9px 12px;">‹</button>
+        ${mode==='day'
+          ? `<input class="field-input" style="margin-bottom:0;flex:1;" type="date" id="stmtDateInput" value="${state.statementDate}" />`
+          : `<input class="field-input" style="margin-bottom:0;flex:1;" type="month" id="stmtMonthInput" value="${state.statementMonth}" />`}
+        <button class="settings-btn" id="stmtNext" style="padding:9px 12px;">›</button>
+      </div>
+    `}
 
     <div class="passbook" style="padding:16px;">
       <div class="passbook-inner" style="padding-left:0;width:100%;">
@@ -401,20 +408,56 @@ function renderStatement(){
       </div>
     </div>
 
-    <p class="section-title" style="margin:22px 0 12px;">আয় — উৎস অনুযায়ী</p>
-    ${statementTableHtml('income', txns, state.incomeCats)}
-
-    <p class="section-title" style="margin:22px 0 12px;">ব্যয় — খাত অনুযায়ী</p>
-    ${statementTableHtml('expense', txns, state.expenseCats)}
-
-    <div class="row-between">
-      <p class="section-title">এই সময়ের লেনদেন</p>
-    </div>
-    ${txns.length===0 ? `<div class="empty small">এই সময়ে কোনো লেনদেন নেই</div>` :
-      `<div class="txn-list">${[...txns].sort((a,b)=> a.date<b.date?1:-1).map(t=>txnRowHtml(t,false)).join('')}</div>`}
+    <div style="height:18px;"></div>
+    ${reportSectionHtml('income', txns, state.incomeCats)}
+    <div style="height:14px;"></div>
+    ${reportSectionHtml('expense', txns, state.expenseCats)}
   `;
 }
-function drawStatementChart(){ /* reserved for future chart additions */ }
+function openCategoryDrill(kind, key){
+  const cats = kind==='income' ? state.incomeCats : state.expenseCats;
+  const cat = cats.find(c=>c.key===key);
+  const periodTxns = getStatementTxns();
+  const list = periodTxns.filter(t=>t.type===kind && t.category===key)
+    .sort((a,b)=> a.date<b.date?1:-1);
+  const label = cat ? cat.label : ((list[0]&&list[0].categoryLabel) || key);
+  const total = list.reduce((s,t)=>s+t.amount,0);
+  const isIncome = kind==='income';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.id = 'drillOverlay';
+  overlay.innerHTML = `
+    <div class="sheet">
+      <div class="sheet-head">
+        <div>
+          <p class="sheet-title">${label}</p>
+          <p style="color:var(--muted);font-size:12px;margin-top:2px;">${periodLabel()} · ${toBnDigits(list.length)}টি এন্ট্রি</p>
+        </div>
+        <button class="icon-btn-sm" id="closeDrill" aria-label="বন্ধ করুন" style="font-size:18px;">✕</button>
+      </div>
+      <div class="passbook" style="padding:14px;margin-bottom:16px;">
+        <div class="passbook-inner" style="padding-left:0;">
+          <p class="balance-label">মোট</p>
+          <p class="balance-value num" style="font-size:22px;color:${isIncome?'var(--income)':'var(--expense)'};">${fmtTaka(total)}</p>
+        </div>
+      </div>
+      <div class="txn-list">
+        ${list.map(t=>txnRowHtml(t,true)).join('')}
+      </div>
+    </div>`;
+  document.getElementById('app').appendChild(overlay);
+  document.getElementById('closeDrill').onclick = ()=>overlay.remove();
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.querySelectorAll('[data-del]').forEach(b=>{
+    b.onclick = ()=>{
+      state.txns = state.txns.filter(t=>t.id!==b.dataset.del);
+      saveTxns(state.txns);
+      overlay.remove();
+      render();
+    };
+  });
+}
 
 
 function catChipsHtml(kind){
@@ -463,52 +506,6 @@ function renderSettings(){
     </div>
     <p style="color:var(--muted);font-size:11px;text-align:center;margin-top:8px;">আমার হিসাব · সংস্করণ ১.০</p>
   `;
-}
-
-function drawCharts(){
-  const trend = monthlyTrend(state.txns);
-  const ctx = document.getElementById('trendChart');
-  if(ctx && trend.length){
-    new Chart(ctx, {
-      type:'bar',
-      data:{ labels: trend.map(t=>t.label), datasets:[
-        {label:'আয়', data: trend.map(t=>t.income), backgroundColor:'#0FA25D', borderRadius:4},
-        {label:'ব্যয়', data: trend.map(t=>t.expense), backgroundColor:'#E24C51', borderRadius:4},
-      ]},
-      options:{ responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(c)=>fmtTaka(c.raw)}} },
-        scales:{ x:{ ticks:{color:'#6E7A88', font:{family:"'Hind Siliguri'"}}, grid:{display:false} },
-                 y:{ display:false } } }
-    });
-  } else if(ctx){
-    ctx.parentElement.innerHTML = `<div class="empty small">তথ্য নেই</div>`;
-  }
-
-  drawBreakdown('incomeBreakdown', breakdownBy(state.txns,'income',state.incomeCats));
-  drawBreakdown('expenseBreakdown', breakdownBy(state.txns,'expense',state.expenseCats));
-}
-
-function drawBreakdown(elId, data){
-  const el = document.getElementById(elId);
-  if(!data.length){ el.innerHTML = `<div class="empty small">তথ্য নেই</div>`; return; }
-  const total = data.reduce((s,d)=>s+d.value,0);
-  el.innerHTML = `
-    <div class="breakdown">
-      <canvas id="${elId}-pie"></canvas>
-      <div class="breakdown-list">
-        ${data.slice(0,5).map((d,i)=>`
-          <div class="breakdown-item">
-            <span class="l"><span class="dot" style="background:${PIE_COLORS[i%PIE_COLORS.length]}"></span>${d.name}</span>
-            <span class="pct num">${toBnDigits(Math.round((d.value/total)*100))}%</span>
-          </div>`).join('')}
-      </div>
-    </div>`;
-  new Chart(document.getElementById(elId+'-pie'), {
-    type:'doughnut',
-    data:{ labels: data.map(d=>d.name), datasets:[{ data: data.map(d=>d.value), backgroundColor: PIE_COLORS, borderWidth:0 }] },
-    options:{ responsive:true, maintainAspectRatio:false, cutout:'60%',
-      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(c)=>fmtTaka(c.raw)}} } }
-  });
 }
 
 /* ---------- add sheet ---------- */
@@ -611,15 +608,28 @@ function attachTabHandlers(){
       };
     });
   }
-  if(state.tab==='statement'){
+  if(state.tab==='report'){
     document.getElementById('stmtModeDay').onclick = ()=>{ state.statementMode='day'; render(); };
     document.getElementById('stmtModeMonth').onclick = ()=>{ state.statementMode='month'; render(); };
-    document.getElementById('stmtPrev').onclick = ()=>{ shiftStatementPeriod(-1); render(); };
-    document.getElementById('stmtNext').onclick = ()=>{ shiftStatementPeriod(1); render(); };
+    document.getElementById('stmtModeRange').onclick = ()=>{ state.statementMode='range'; render(); };
+    const prevBtn = document.getElementById('stmtPrev');
+    if(prevBtn) prevBtn.onclick = ()=>{ shiftStatementPeriod(-1); render(); };
+    const nextBtn = document.getElementById('stmtNext');
+    if(nextBtn) nextBtn.onclick = ()=>{ shiftStatementPeriod(1); render(); };
     const dateInput = document.getElementById('stmtDateInput');
     if(dateInput) dateInput.onchange = ()=>{ state.statementDate = dateInput.value; render(); };
     const monthInput = document.getElementById('stmtMonthInput');
     if(monthInput) monthInput.onchange = ()=>{ state.statementMonth = monthInput.value; render(); };
+    const fromInput = document.getElementById('stmtFromInput');
+    if(fromInput) fromInput.onchange = ()=>{ state.statementRangeFrom = fromInput.value; render(); };
+    const toInput = document.getElementById('stmtToInput');
+    if(toInput) toInput.onchange = ()=>{ state.statementRangeTo = toInput.value; render(); };
+    document.querySelectorAll('[data-drill]').forEach(b=>{
+      b.onclick = ()=>{
+        const [kind, key] = b.dataset.drill.split(':');
+        openCategoryDrill(kind, key);
+      };
+    });
   }
   if(state.tab==='settings'){
     document.getElementById('addIncomeCatBtn').onclick = ()=>addCategory('income');
